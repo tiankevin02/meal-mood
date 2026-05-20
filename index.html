@@ -72,12 +72,12 @@
 
           <label class="field field-wide">
             <span>食材</span>
-            <input id="ingredients" name="ingredients" type="text" value="卵、鶏肉、豆腐、きのこ、ねぎ" />
+            <input id="ingredients" name="ingredients" type="text" placeholder="空欄OK / あるものを書く" autocomplete="off" enterkeyhint="done" />
           </label>
 
           <label class="field field-wide">
             <span>持ってるお酒</span>
-            <input id="owned-drinks" name="owned-drinks" type="text" value="白ワイン、ビール、レモンサワー、日本酒" />
+            <input id="owned-drinks" name="owned-drinks" type="text" placeholder="空欄OK / 買うなら提案" autocomplete="off" enterkeyhint="done" />
           </label>
 
           <label class="toggle-card">
@@ -90,22 +90,26 @@
         </form>
       </section>
 
-      <section class="result-panel" aria-live="polite">
+      <section class="result-panel" id="result-panel" aria-live="polite">
         <div class="status-row">
           <div>
             <p class="eyebrow">ai chef</p>
             <h2 id="recipe-title">やさしい塩レモン鶏豆腐スープ</h2>
           </div>
-          <div class="score-pill" id="score-pill">92</div>
+          <div class="score-pill" aria-label="相性スコア">
+            <span id="score-pill">92</span>
+            <small>fit</small>
+          </div>
         </div>
 
         <div class="meta-row" id="meta-row"></div>
+        <div class="quick-strip" id="quick-strip"></div>
 
         <div class="recipe-layout">
           <article class="recipe-card main-recipe">
             <div class="card-head">
               <span class="mini-icon" id="dish-icon" aria-hidden="true"></span>
-              <h3>レシピ</h3>
+              <h3>今日の一皿</h3>
             </div>
             <p id="recipe-summary"></p>
             <div class="section-block">
@@ -138,21 +142,27 @@
           </aside>
         </div>
 
-        <div class="request-dock" aria-label="レシピ調整">
-          <button type="button" data-request="different">これちょっと違う</button>
-          <button type="button" data-request="easier">もっと簡単</button>
-          <button type="button" data-request="meatier">もっと肉増やして</button>
-          <button type="button" data-request="vegetable">野菜多め</button>
-          <button type="button" data-request="drink">お酒に寄せる</button>
-          <button type="button" data-request="light">軽め</button>
-          <button type="button" data-request="warm">あったかい</button>
-          <button type="button" data-request="spicy">辛く</button>
-        </div>
+        <section class="request-panel" aria-labelledby="request-title">
+          <div class="request-head">
+            <h3 id="request-title">調整</h3>
+            <span id="request-note">今の提案</span>
+          </div>
+          <div class="request-dock" aria-label="レシピ調整">
+            <button type="button" data-request="different">これちょっと違う</button>
+            <button type="button" data-request="easier">もっと簡単</button>
+            <button type="button" data-request="meatier">肉多め</button>
+            <button type="button" data-request="vegetable">野菜多め</button>
+            <button type="button" data-request="drink">お酒に寄せる</button>
+            <button type="button" data-request="light">軽め</button>
+            <button type="button" data-request="warm">あったかい</button>
+            <button type="button" data-request="spicy">辛く</button>
+          </div>
 
-        <form class="custom-request" id="custom-request-form">
-          <input id="custom-request" type="text" placeholder="例: もっと和風、洗い物少なめ、魚にして" />
-          <button type="submit">変更</button>
-        </form>
+          <form class="custom-request" id="custom-request-form">
+            <input id="custom-request" type="text" placeholder="例: もっと和風、洗い物少なめ、魚にして" autocomplete="off" enterkeyhint="send" />
+            <button type="submit">変更</button>
+          </form>
+        </section>
       </section>
     </main>
 
