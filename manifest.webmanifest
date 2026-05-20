@@ -1,0 +1,18 @@
+{
+  "name": "meal mood",
+  "short_name": "meal mood",
+  "description": "気分、天気、運動量、体力、食材、お酒に合わせて今日のレシピを提案します。",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fcfffd",
+  "theme_color": "#fcfffd",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

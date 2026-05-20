@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fcfffd" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="meal mood" />
+    <title>meal mood</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="planner" aria-labelledby="app-title">
+        <div class="brand-row">
+          <div>
+            <p class="eyebrow">today's kitchen</p>
+            <h1 id="app-title">meal mood</h1>
+          </div>
+          <div class="mascot" aria-hidden="true">
+            <span class="mascot-face">u.u</span>
+          </div>
+        </div>
+
+        <form class="input-grid" id="recipe-form">
+          <label class="field">
+            <span>気分</span>
+            <select id="mood" name="mood">
+              <option value="やさしい">やさしい</option>
+              <option value="元気">元気</option>
+              <option value="癒やされたい">癒やされたい</option>
+              <option value="ご褒美">ご褒美</option>
+              <option value="さっぱり">さっぱり</option>
+              <option value="がっつり">がっつり</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>天気</span>
+            <select id="weather" name="weather">
+              <option value="晴れ">晴れ</option>
+              <option value="曇り">曇り</option>
+              <option value="雨">雨</option>
+              <option value="暑い">暑い</option>
+              <option value="寒い">寒い</option>
+              <option value="湿気">湿気</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>運動量</span>
+            <select id="activity" name="activity">
+              <option value="少なめ">少なめ</option>
+              <option value="普通">普通</option>
+              <option value="多め">多め</option>
+              <option value="かなり多め">かなり多め</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>体力</span>
+            <select id="energy" name="energy">
+              <option value="10分">10分</option>
+              <option value="20分" selected>20分</option>
+              <option value="35分">35分</option>
+              <option value="ゆっくり">ゆっくり</option>
+            </select>
+          </label>
+
+          <label class="field field-wide">
+            <span>食材</span>
+            <input id="ingredients" name="ingredients" type="text" value="卵、鶏肉、豆腐、きのこ、ねぎ" />
+          </label>
+
+          <label class="field field-wide">
+            <span>持ってるお酒</span>
+            <input id="owned-drinks" name="owned-drinks" type="text" value="白ワイン、ビール、レモンサワー、日本酒" />
+          </label>
+
+          <label class="toggle-card">
+            <input id="want-drink" name="want-drink" type="checkbox" checked />
+            <span class="toggle-ui" aria-hidden="true"></span>
+            <span>お酒も合わせる</span>
+          </label>
+
+          <button class="primary-button" type="submit">おすすめ</button>
+        </form>
+      </section>
+
+      <section class="result-panel" aria-live="polite">
+        <div class="status-row">
+          <div>
+            <p class="eyebrow">ai chef</p>
+            <h2 id="recipe-title">やさしい塩レモン鶏豆腐スープ</h2>
+          </div>
+          <div class="score-pill" id="score-pill">92</div>
+        </div>
+
+        <div class="meta-row" id="meta-row"></div>
+
+        <div class="recipe-layout">
+          <article class="recipe-card main-recipe">
+            <div class="card-head">
+              <span class="mini-icon" id="dish-icon" aria-hidden="true"></span>
+              <h3>レシピ</h3>
+            </div>
+            <p id="recipe-summary"></p>
+            <div class="section-block">
+              <h4>材料</h4>
+              <ul id="ingredient-list"></ul>
+            </div>
+            <div class="section-block">
+              <h4>作り方</h4>
+              <ol id="step-list"></ol>
+            </div>
+          </article>
+
+          <aside class="side-stack">
+            <article class="recipe-card">
+              <div class="card-head">
+                <span class="mini-icon drink-icon" aria-hidden="true"></span>
+                <h3>お酒</h3>
+              </div>
+              <p class="drink-name" id="drink-name"></p>
+              <p id="drink-reason"></p>
+            </article>
+
+            <article class="recipe-card">
+              <div class="card-head">
+                <span class="mini-icon cellar-icon" aria-hidden="true"></span>
+                <h3>手持ち酒</h3>
+              </div>
+              <div id="owned-pairings" class="pairing-list"></div>
+            </article>
+          </aside>
+        </div>
+
+        <div class="request-dock" aria-label="レシピ調整">
+          <button type="button" data-request="different">これちょっと違う</button>
+          <button type="button" data-request="easier">もっと簡単</button>
+          <button type="button" data-request="meatier">もっと肉増やして</button>
+          <button type="button" data-request="vegetable">野菜多め</button>
+          <button type="button" data-request="drink">お酒に寄せる</button>
+          <button type="button" data-request="light">軽め</button>
+          <button type="button" data-request="warm">あったかい</button>
+          <button type="button" data-request="spicy">辛く</button>
+        </div>
+
+        <form class="custom-request" id="custom-request-form">
+          <input id="custom-request" type="text" placeholder="例: もっと和風、洗い物少なめ、魚にして" />
+          <button type="submit">変更</button>
+        </form>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+    <script>
+      if ("serviceWorker" in navigator && location.protocol !== "file:") {
+        navigator.serviceWorker.register("./sw.js");
+      }
+    </script>
+  </body>
+</html>
