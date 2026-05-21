@@ -116,6 +116,9 @@ const requestMap = {
 const form = document.querySelector("#recipe-form");
 const customForm = document.querySelector("#custom-request-form");
 const requestDock = document.querySelector(".request-dock");
+const resultPanel = document.querySelector("#result-panel");
+const requestNote = document.querySelector("#request-note");
+const quickStrip = document.querySelector("#quick-strip");
 
 function getInputs() {
   return {
@@ -158,7 +161,7 @@ function chooseRecipe(inputs) {
     if (request.includes("魚") && recipe.protein === "魚") score += 26;
     if (request.includes("和風") && ["日本酒", "麦焼酎"].some((drink) => recipe.drinks.includes(drink))) score += 16;
     if (request.includes("洗い物") && ["quick", "pan", "soup"].includes(recipe.style)) score += 18;
-    if (request.includes("違う")) score += ((index + state.variation) % 3) * 9;
+    if (request.includes("違う") || request.includes("方向性")) score += ((index + state.variation) % 3) * 9;
     score -= Math.abs(state.variation - index) % 4;
     return { recipe, score };
   });
@@ -189,6 +192,9 @@ function adaptRecipe(recipe, inputs) {
   if (inputs.activity.includes("多め")) {
     ingredients.push("追加たんぱく質 少し", "ごはんまたは麺 お好みで");
     summary += " 運動量に合わせてたんぱく質と炭水化物を少し厚めにします。";
+  }
+  if (!inputs.ingredients.length) {
+    summary += " 食材は買い足し前提で、近くで揃えやすいものに寄せます。";
   }
 
   if (request.includes("簡単")) {
@@ -276,32 +282,182 @@ function inferDrinkNote(drink, recipe) {
   return `${recipe.protein}のうまみを邪魔しないよう、冷やしすぎず少量から。`;
 }
 
-function render() {
-  const inputs = getInputs();
+function buildLocalRecommendation(inputs) {
   const recipe = adaptRecipe(chooseRecipe(inputs), inputs);
   const drink = chooseDrink(recipe, inputs);
+  return {
+    title: recipe.title,
+    score: recipe.score,
+    summary: recipe.summary,
+    time: recipe.time,
+    effort: recipe.effort,
+    protein: recipe.protein,
+    ingredients: recipe.ingredients,
+    steps: recipe.steps,
+    drink,
+  };
+}
 
-  document.querySelector("#recipe-title").textContent = recipe.title;
-  document.querySelector("#score-pill").textContent = recipe.score;
-  document.querySelector("#recipe-summary").textContent = recipe.summary;
-  document.querySelector("#drink-name").textContent = drink.name;
-  document.querySelector("#drink-reason").textContent = drink.reason;
+async function fetchAiRecommendation(inputs) {
+  const response = await fetch("/api/recommend", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      inputs,
+      request: state.request,
+      variation: state.variation,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`AI request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+function canUseRemoteAi() {
+  if (location.protocol === "file:") return false;
+  if (location.hostname.endsWith("github.io")) return false;
+  return true;
+}
+
+function normalizeRecommendation(recommendation, inputs) {
+  const fallback = buildLocalRecommendation(inputs);
+  return {
+    title: recommendation.title || fallback.title,
+    score: clampNumber(recommendation.score, 70, 99, fallback.score),
+    summary: recommendation.summary || fallback.summary,
+    time: clampNumber(recommendation.time, 5, 60, fallback.time),
+    effort: recommendation.effort || fallback.effort,
+    protein: recommendation.protein || fallback.protein,
+    ingredients: normalizeArray(recommendation.ingredients, fallback.ingredients),
+    steps: normalizeArray(recommendation.steps, fallback.steps),
+    drink: {
+      name: recommendation.drink?.name || fallback.drink.name,
+      reason: recommendation.drink?.reason || fallback.drink.reason,
+      pairings: normalizePairings(recommendation.drink?.pairings, fallback.drink.pairings),
+    },
+  };
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(number)));
+}
+
+function normalizeArray(value, fallback) {
+  if (!Array.isArray(value)) return fallback;
+  const cleaned = value.map((item) => String(item).trim()).filter(Boolean);
+  return cleaned.length ? cleaned : fallback;
+}
+
+function normalizePairings(value, fallback) {
+  if (!Array.isArray(value)) return fallback;
+  const cleaned = value
+    .map((item) => ({
+      name: String(item?.name || "").trim(),
+      level: String(item?.level || "").trim(),
+      note: String(item?.note || "").trim(),
+    }))
+    .filter((item) => item.name && item.level && item.note);
+  return cleaned.length ? cleaned : fallback;
+}
+
+function setLoading(isLoading) {
+  state.loading = isLoading;
+  resultPanel.setAttribute("aria-busy", String(isLoading));
+  form.querySelector(".primary-button").disabled = isLoading;
+  customForm.querySelector("button").disabled = isLoading;
+  requestDock.querySelectorAll("button").forEach((button) => {
+    button.disabled = isLoading;
+  });
+}
+
+function renderLoading() {
+  document.querySelector("#recipe-title").textContent = "AIが考え中";
+  document.querySelector("#recipe-summary").textContent = "今日の条件から、料理とお酒の相性を組み立てています。";
+  document.querySelector("#score-pill").textContent = "AI";
+  document.querySelector("#meta-row").innerHTML = ["mood", "weather", "recipe"].map((item) => `<span>${item}</span>`).join("");
+  quickStrip.innerHTML = ["調理", "食材", "お酒"]
+    .map(
+      (item) => `
+        <div class="quick-item">
+          <span>${item}</span>
+          <strong>調整中</strong>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+async function recommend({ useAi = true, focus = false } = {}) {
+  const inputs = getInputs();
+  let recommendation = buildLocalRecommendation(inputs);
+  let source = "local";
+
+  if (useAi && canUseRemoteAi()) {
+    setLoading(true);
+    renderLoading();
+    try {
+      recommendation = normalizeRecommendation(await fetchAiRecommendation(inputs), inputs);
+      source = "ai";
+    } catch (error) {
+      console.warn(error);
+      recommendation = buildLocalRecommendation(inputs);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  renderRecommendation(recommendation, inputs, source);
+  if (focus) focusResult();
+}
+
+function renderRecommendation(recommendation, inputs, source) {
+  document.querySelector("#recipe-title").textContent = recommendation.title;
+  document.querySelector("#score-pill").textContent = recommendation.score;
+  document.querySelector("#recipe-summary").textContent = recommendation.summary;
+  document.querySelector("#drink-name").textContent = recommendation.drink.name;
+  document.querySelector("#drink-reason").textContent = recommendation.drink.reason;
 
   const meta = [
-    `${recipe.time}分`,
-    recipe.effort,
+    `${recommendation.time}分`,
+    recommendation.effort,
     inputs.mood,
     inputs.weather,
     inputs.activity,
-    recipe.protein,
+    recommendation.protein,
   ];
   document.querySelector("#meta-row").innerHTML = meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("");
-  document.querySelector("#ingredient-list").innerHTML = recipe.ingredients.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
-  document.querySelector("#step-list").innerHTML = recipe.steps.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+
+  const pantryLabel = inputs.ingredients.length ? `${inputs.ingredients.slice(0, 2).join("・")}を活用` : "買い足し前提";
+  const drinkLabel = !inputs.wantDrink ? "ノンアル" : inputs.ownedDrinks.length ? `${recommendation.drink.name}が合う` : `${recommendation.drink.name}を買うなら`;
+  const quickItems = [
+    { label: "調理", value: `${recommendation.time}分 / ${recommendation.effort}` },
+    { label: "食材", value: pantryLabel },
+    { label: "お酒", value: drinkLabel },
+  ];
+  quickStrip.innerHTML = quickItems
+    .map(
+      (item) => `
+        <div class="quick-item">
+          <span>${escapeHtml(item.label)}</span>
+          <strong>${escapeHtml(item.value)}</strong>
+        </div>
+      `,
+    )
+    .join("");
+
+  document.querySelector("#ingredient-list").innerHTML = recommendation.ingredients.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  document.querySelector("#step-list").innerHTML = recommendation.steps.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
 
   const pairings = document.querySelector("#owned-pairings");
-  pairings.innerHTML = drink.pairings.length
-    ? drink.pairings
+  pairings.innerHTML = recommendation.drink.pairings.length
+    ? recommendation.drink.pairings
         .map(
           (item) => `
             <div class="pairing-item">
@@ -312,6 +468,12 @@ function render() {
         )
         .join("")
     : `<div class="pairing-item"><strong>休肝日</strong><span>温かいお茶か柑橘炭酸が合います。</span></div>`;
+
+  const sourceLabel = source === "ai" ? "AI提案" : "ローカル提案";
+  requestNote.textContent = state.request ? `「${state.request}」で再提案` : sourceLabel;
+  requestDock.querySelectorAll("button[data-request]").forEach((button) => {
+    button.classList.toggle("is-active", requestMap[button.dataset.request] === state.request);
+  });
 }
 
 function escapeHtml(value) {
@@ -327,12 +489,13 @@ form.addEventListener("submit", (event) => {
   event.preventDefault();
   state.variation = 0;
   state.request = "";
-  render();
+  recommend({ useAi: true, focus: true });
 });
 
 form.addEventListener("input", () => {
   state.variation = 0;
-  render();
+  state.request = "";
+  recommend({ useAi: false });
 });
 
 requestDock.addEventListener("click", (event) => {
@@ -340,7 +503,7 @@ requestDock.addEventListener("click", (event) => {
   if (!button) return;
   state.variation += 1;
   state.request = requestMap[button.dataset.request] || "";
-  render();
+  recommend({ useAi: true, focus: true });
 });
 
 customForm.addEventListener("submit", (event) => {
@@ -349,7 +512,14 @@ customForm.addEventListener("submit", (event) => {
   state.variation += 1;
   state.request = input.value.trim() || "方向性を変えて";
   input.value = "";
-  render();
+  recommend({ useAi: true, focus: true });
 });
 
-render();
+recommend({ useAi: true });
+
+function focusResult() {
+  if (window.matchMedia("(max-width: 760px)").matches) {
+    resultPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  if ("vibrate" in navigator) navigator.vibrate(8);
+}
