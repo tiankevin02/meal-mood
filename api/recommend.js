@@ -1,4 +1,7 @@
-const MODEL = process.env.OPENAI_MODEL || "gpt-5.4-mini";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.4-mini";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const SYSTEM_INSTRUCTION =
+  "あなたは日本の家庭料理とお酒の相性に詳しい、ミニマルで実用的な料理AIです。返答は必ず指定されたJSONスキーマに従い、日本語で、買い物しやすく、調理工程は短く具体的にしてください。";
 
 export default async function handler(req, res) {
   if (req.method === "OPTIONS") {
@@ -12,54 +15,93 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "POST only" });
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return res.status(503).json({ error: "OPENAI_API_KEY is not configured" });
+  if (!process.env.GEMINI_API_KEY && !process.env.OPENAI_API_KEY) {
+    return res.status(503).json({ error: "GEMINI_API_KEY or OPENAI_API_KEY is not configured" });
   }
 
   try {
     const body = parseBody(req.body);
     const payload = buildPromptPayload(body);
-
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        instructions:
-          "あなたは日本の家庭料理とお酒の相性に詳しい、ミニマルで実用的な料理AIです。返答は必ず指定されたJSONスキーマに従い、日本語で、買い物しやすく、調理工程は短く具体的にしてください。",
-        input: JSON.stringify(payload),
-        reasoning: { effort: "low" },
-        max_output_tokens: 1600,
-        text: {
-          format: {
-            type: "json_schema",
-            name: "meal_mood_recommendation",
-            strict: true,
-            schema: recommendationSchema,
-          },
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return res.status(response.status).json({ error: "OpenAI request failed", detail: errorText.slice(0, 500) });
-    }
-
-    const data = await response.json();
-    const output = extractOutputText(data);
-    if (!output) {
-      return res.status(502).json({ error: "No model output" });
-    }
+    const output = process.env.GEMINI_API_KEY ? await requestGemini(payload) : await requestOpenAI(payload);
 
     res.setHeader("Cache-Control", "no-store");
     return res.status(200).json(JSON.parse(output));
   } catch (error) {
     return res.status(500).json({ error: "Recommendation failed", detail: error.message });
   }
+}
+
+async function requestGemini(payload) {
+  const modelPath = GEMINI_MODEL.startsWith("models/") ? GEMINI_MODEL : `models/${GEMINI_MODEL}`;
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": process.env.GEMINI_API_KEY,
+    },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: SYSTEM_INSTRUCTION }],
+      },
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: JSON.stringify(payload) }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.8,
+        maxOutputTokens: 1600,
+        responseMimeType: "application/json",
+        responseJsonSchema: recommendationSchema,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini request failed: ${response.status} ${errorText.slice(0, 500)}`);
+  }
+
+  const data = await response.json();
+  const output = extractGeminiText(data);
+  if (!output) throw new Error("No Gemini model output");
+  return output;
+}
+
+async function requestOpenAI(payload) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      instructions: SYSTEM_INSTRUCTION,
+      input: JSON.stringify(payload),
+      reasoning: { effort: "low" },
+      max_output_tokens: 1600,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "meal_mood_recommendation",
+          strict: true,
+          schema: recommendationSchema,
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI request failed: ${response.status} ${errorText.slice(0, 500)}`);
+  }
+
+  const data = await response.json();
+  const output = extractOpenAIText(data);
+  if (!output) throw new Error("No OpenAI model output");
+  return output;
 }
 
 function parseBody(body) {
@@ -92,11 +134,16 @@ function buildPromptPayload(body) {
   };
 }
 
-function extractOutputText(data) {
+function extractOpenAIText(data) {
   if (typeof data.output_text === "string") return data.output_text;
   const content = data.output?.flatMap((item) => item.content || []) || [];
   const textItem = content.find((item) => item.type === "output_text" && typeof item.text === "string");
   return textItem?.text || "";
+}
+
+function extractGeminiText(data) {
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  return parts.map((part) => part.text || "").join("").trim();
 }
 
 const recommendationSchema = {
