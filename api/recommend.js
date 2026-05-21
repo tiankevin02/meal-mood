@@ -51,7 +51,7 @@ async function requestGemini(payload) {
       ],
       generationConfig: {
         temperature: 0.8,
-        maxOutputTokens: 1600,
+        maxOutputTokens: 4096,
         responseMimeType: "application/json",
         responseJsonSchema: recommendationSchema,
       },
